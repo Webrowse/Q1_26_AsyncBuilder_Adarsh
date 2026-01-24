@@ -1,7 +1,7 @@
-import { Commitment, Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js"
-import wallet from "./turbine3-wallet.json"
-import { getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID, transfer } from "@solana/spl-token";
-import { signerPayer } from "@metaplex-foundation/umi";
+import { Commitment, Connection, Keypair, /*LAMPORTS_PER_SOL,*/ PublicKey } from "@solana/web3.js"
+import wallet from "./wallet/turbine3-wallet.json"
+import { getOrCreateAssociatedTokenAccount, /*TOKEN_PROGRAM_ID,*/ transfer } from "@solana/spl-token";
+// import { signerPayer } from "@metaplex-foundation/umi";
 
 // We're going to import our keypair from the wallet file
 const keypair = Keypair.fromSecretKey(new Uint8Array(wallet));
@@ -26,31 +26,28 @@ const to = new PublicKey("BHkdzFCio83A22Kw8x7fwUmBYFmztSbg3RgzJpXacVYM");
             mint,
             keypair.publicKey,
         )
-        // const fromWall = new PublicKey(fromWallet);
         console.log("The fromWallet ATA created "+fromWallet.address);
-        // Get the token account of the toWallet address, and if it does not exist, create it
         
+        // Get the token account of the toWallet address, and if it does not exist, create it
         const toWallet = await getOrCreateAssociatedTokenAccount(
             connection,
             keypair,
             mint,
             to,
         )
-        // const toWall = new PublicKey(toWallet);
         console.log("The toWallet ATA created "+ toWallet.address);
 
         // Transfer the new token to the "toTokenAccount" we just created
-
-        const tx = await transfer (
+        const toTokenAccount = await transfer (
             connection,
             keypair,
             fromWallet.address,
             toWallet.address,
             keypair.publicKey,
-            1_000_000_0
+            10_000_000
         )
 
-        console.log("transfer is taken out " + tx);
+        console.log("transfer is taken out " + toTokenAccount);
 
     } catch(e) {
         console.error(`Oops, something went wrong: ${e}`)
