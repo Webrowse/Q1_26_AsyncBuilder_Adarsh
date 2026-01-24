@@ -1,4 +1,4 @@
-import wallet from "./turbine3-wallet.json"
+import wallet from "./wallet/turbine3-wallet.json"
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import { 
     createMetadataAccountV3, 
@@ -57,3 +57,6 @@ umi.use(signerIdentity(createSignerFromKeypair(umi, keypair)));
         console.error(`Oops, something went wrong: ${e}`)
     }
 })();
+
+// ------------ Result -------------
+// 3XcPoKTw8t3QF4rTjSRdqZwfWxTYWjdKY5fswUTmLuKH8UJfZvVvSaouY4KEVtvHjMwrBooHXsT6yUst8fKnqiCw

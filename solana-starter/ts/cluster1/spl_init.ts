@@ -1,6 +1,6 @@
 import { Keypair, Connection, Commitment } from "@solana/web3.js";
 import { createMint } from '@solana/spl-token';
-import wallet from "./turbine3-wallet.json"
+import wallet from "./wallet/turbine3-wallet.json"
 
 // Import our keypair from the wallet file
 const keypair = Keypair.fromSecretKey(new Uint8Array(wallet));
@@ -25,3 +25,6 @@ const connection = new Connection("https://api.devnet.solana.com", commitment);
         console.log(`Oops, something went wrong: ${error}`)
     }
 })()
+
+// ------------ Result -------------
+// Mint Address:  6D4AtdeMiC8c8jNVqYjWqHvTwt46C5Hr7S6Z9ANmsxTM

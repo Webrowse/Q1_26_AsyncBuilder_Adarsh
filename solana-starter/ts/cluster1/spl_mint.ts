@@ -1,6 +1,6 @@
 import { Keypair, PublicKey, Connection, Commitment } from "@solana/web3.js";
 import { getOrCreateAssociatedTokenAccount, mintTo } from '@solana/spl-token';
-import wallet from "./turbine3-wallet.json"
+import wallet from "./wallet/turbine3-wallet.json"
 
 // Import our keypair from the wallet file
 const keypair = Keypair.fromSecretKey(new Uint8Array(wallet));
@@ -39,3 +39,8 @@ const mint = new PublicKey("6D4AtdeMiC8c8jNVqYjWqHvTwt46C5Hr7S6Z9ANmsxTM");
         console.log(`Oops, something went wrong: ${error}`)
     }
 })()
+
+// ------------ Result -------------
+// Your ata is: AeFppBK2C3q292VtrnqzGzUEJbnoCMg8zcJTeH8By8h6
+
+// Your mint txid: Pa82jeD4MPefAdDYynQMfSRpuoWJEHBcuBeeWYHfmAQCV6VSHqXYsUfF5M5mY6zUQNbh6S1KQoYhqb8HGc12SHR
