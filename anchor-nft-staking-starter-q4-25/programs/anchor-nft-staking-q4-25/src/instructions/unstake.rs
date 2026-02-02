@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use mpl_core::{
-    instructions::UpdatePluginV1CpiBuilder,
-    types::{FreezeDelegate, Plugin},
+    instructions::{RemovePluginV1CpiBuilder, UpdatePluginV1CpiBuilder},
+    types::{FreezeDelegate, Plugin, PluginType},
     ID as CORE_PROGRAM_ID,
 };
 
@@ -68,17 +68,19 @@ impl<'info> Unstake<'info> {
             .checked_sub(self.stake_account.staked_at)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        // Check if freeze period has passed
+        // Check if freeze period has passed (freeze_period is in days, convert to seconds)
+        let freeze_period_seconds = (self.config.freeze_period as i64)
+            .checked_mul(86400)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
         require!(
-            time_staked >= self.config.freeze_period as i64,
+            time_staked >= freeze_period_seconds,
             StakeError::FreezePeriodNotPassed
         );
 
         // Calculate points earned (points_per_stake * days staked)
-        // Using seconds for more granular calculation, then converting to days
         let days_staked = time_staked.checked_div(86400).unwrap_or(0); // 86400 seconds in a day
         let points_earned = (self.config.points_per_stake as i64)
-            .checked_mul(days_staked.max(1))
+            .checked_mul(days_staked)
             .unwrap_or(i64::MAX) as u32;
 
         // Add points to user account
@@ -91,19 +93,33 @@ impl<'info> Unstake<'info> {
             .checked_sub(1)
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        // Signer seeds for config PDA (plugin authority)
-        let signer_seeds: &[&[&[u8]]] = &[&[b"config".as_ref(), &[self.config.bump]]];
+        // Signer seeds for stake PDA (plugin authority)
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"stake".as_ref(),
+            self.config.to_account_info().key.as_ref(),
+            self.asset.to_account_info().key.as_ref(),
+            &[self.stake_account.bump],
+        ]];
 
         // Unfreeze the NFT by updating the plugin
-        // Use config PDA as authority since it owns the freeze plugin
-        // Note: We only unfreeze, don't remove the plugin (removal requires asset owner)
+        // Use stake PDA as authority since it owns the freeze plugin
         UpdatePluginV1CpiBuilder::new(&self.core_program.to_account_info())
             .asset(&self.asset.to_account_info())
             .collection(Some(&self.collection.to_account_info()))
             .payer(&self.user.to_account_info())
-            .authority(Some(&self.config.to_account_info()))
+            .authority(Some(&self.stake_account.to_account_info()))
             .system_program(&self.system_program.to_account_info())
             .plugin(Plugin::FreezeDelegate(FreezeDelegate { frozen: false }))
+            .invoke_signed(signer_seeds)?;
+
+        // Remove the freeze delegate plugin
+        RemovePluginV1CpiBuilder::new(&self.core_program.to_account_info())
+            .asset(&self.asset.to_account_info())
+            .collection(Some(&self.collection.to_account_info()))
+            .payer(&self.user.to_account_info())
+            .authority(Some(&self.stake_account.to_account_info()))
+            .system_program(&self.system_program.to_account_info())
+            .plugin_type(PluginType::FreezeDelegate)
             .invoke_signed(signer_seeds)?;
 
         Ok(())

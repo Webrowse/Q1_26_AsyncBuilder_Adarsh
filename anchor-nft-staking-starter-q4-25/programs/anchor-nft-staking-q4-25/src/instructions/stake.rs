@@ -84,7 +84,7 @@ impl<'info> Stake<'info> {
             .ok_or(ProgramError::ArithmeticOverflow)?;
 
         // Add freeze plugin to the NFT so it cannot be transferred
-        // Set config PDA as plugin authority so our program can unfreeze later
+        // Set stake PDA as plugin authority so our program can unfreeze later
         AddPluginV1CpiBuilder::new(&self.core_program.to_account_info())
             .asset(&self.asset.to_account_info())
             .collection(Some(&self.collection.to_account_info()))
@@ -93,7 +93,7 @@ impl<'info> Stake<'info> {
             .system_program(&self.system_program.to_account_info())
             .plugin(Plugin::FreezeDelegate(FreezeDelegate { frozen: true }))
             .init_authority(PluginAuthority::Address {
-                address: self.config.key(),
+                address: self.stake_account.key(),
             })
             .invoke()?;
 
