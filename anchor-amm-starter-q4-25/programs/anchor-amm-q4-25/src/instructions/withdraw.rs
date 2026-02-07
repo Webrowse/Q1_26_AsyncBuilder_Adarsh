@@ -58,7 +58,7 @@ pub struct Withdraw<'info> {
     pub user_lp: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
-    pub associated_token_program: Program<'info, AssociatedToken>
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 impl<'info> Withdraw<'info> {
@@ -67,44 +67,64 @@ impl<'info> Withdraw<'info> {
         amount: u64, // Amount of LP tokens that the user wants to "burn"
         min_x: u64,  // Minimum amount of token X that the user wants to receive
         min_y: u64,  // Minimum amount of token Y that the user wants to receive
+        expiration: i64,
     ) -> Result<()> {
         require!(self.config.locked == false, AmmError::PoolLocked);
         require!(amount != 0, AmmError::InvalidAmount);
+        require!(
+            Clock::get()?.unix_timestamp < expiration,
+            AmmError::OfferExpired
+        );
 
+        // Calculate how much X and Y the user gets for burning `amount` LP tokens
         let amounts = ConstantProduct::xy_withdraw_amounts_from_l(
             self.vault_x.amount,
             self.vault_y.amount,
             self.mint_lp.supply,
             amount,
-        6,).map_err(|_|AmmError::CurveError)?;
+            6,
+        )
+        .map_err(|_| AmmError::CurveError)?;
 
-        //Slippage
+        // Slippage check
         require!(amounts.x >= min_x && amounts.y >= min_y, AmmError::SlippageExceeded);
 
-        // Burn the lp token first
+        // Burn the LP tokens first
         self.burn_lp_tokens(amount)?;
 
-        //withdraw token x to user
+        // Withdraw token X to user
         self.withdraw_tokens(true, amounts.x)?;
 
-        //withdraw token Y to user
+        // Withdraw token Y to user
         self.withdraw_tokens(false, amounts.y)
     }
 
     pub fn withdraw_tokens(&self, is_x: bool, amount: u64) -> Result<()> {
         let (from, to) = match is_x {
-            true => (self.vault_x.to_account_info(), self.user_x.to_account_info()),
-            false => (self.vault_y.to_account_info(), self.user_y.to_account_info()),
+            true => (
+                self.vault_x.to_account_info(),
+                self.user_x.to_account_info(),
+            ),
+            false => (
+                self.vault_y.to_account_info(),
+                self.user_y.to_account_info(),
+            ),
         };
 
         let cpi_program = self.token_program.to_account_info();
 
         let cpi_accounts = Transfer {
-            from, to, authority: self.config.to_account_info(),
+            from,
+            to,
+            authority: self.config.to_account_info(),
         };
 
-        // pda signing (vault owned by config PDA)
-        let signer_seeds:&[&[&[u8]]] = &[&[b"config", &self.config.seed.to_le_bytes(), &[self.config.config_bump],]];
+        // PDA signing - vault is owned by config PDA
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"config",
+            &self.config.seed.to_le_bytes(),
+            &[self.config.config_bump],
+        ]];
 
         let ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
 
@@ -122,6 +142,6 @@ impl<'info> Withdraw<'info> {
 
         let ctx = CpiContext::new(cpi_program, cpi_accounts);
 
-        burn (ctx, amount)
+        burn(ctx, amount)
     }
 }

@@ -50,73 +50,106 @@ pub struct Swap<'info> {
 }
 
 impl<'info> Swap<'info> {
-    pub fn swap(&mut self, is_x: bool, amount: u64, min: u64) -> Result<()> {
+    pub fn swap(
+        &mut self,
+        is_x: bool,
+        amount_in: u64,
+        min_amount_out: u64,
+        expiration: i64,
+    ) -> Result<()> {
         require!(self.config.locked == false, AmmError::PoolLocked);
-        require!(amount != 0, AmmError::InvalidAmount);
+        require!(amount_in != 0, AmmError::InvalidAmount);
+        require!(
+            Clock::get()?.unix_timestamp < expiration,
+            AmmError::OfferExpired
+        );
+        require!(
+            self.vault_x.amount > 0 && self.vault_y.amount > 0,
+            AmmError::NoLiquidityInPool
+        );
 
-        // Init the constant product curve with current pool state
+        // Initialize the constant product curve with current pool state
         let mut curve = ConstantProduct::init(
             self.vault_x.amount,
             self.vault_y.amount,
-            0,                                  // LP not required for swap cal
+            0, // LP supply not needed for swap calculation
             self.config.fee,
             None,
         )
         .map_err(|_| AmmError::CurveError)?;
 
-        // for swap direction
-        let pair = match is_x{
+        // Determine swap direction using LiquidityPair enum
+        let pair = match is_x {
             true => LiquidityPair::X,
             false => LiquidityPair::Y,
         };
 
-        // Calculate swap output using product curve
-        let result = curve.swap(pair, amount, min)
-            .map_err(|_|AmmError::CurveError)?;
+        // Calculate swap output using constant product curve
+        let result = curve
+            .swap(pair, amount_in, min_amount_out)
+            .map_err(|_| AmmError::CurveError)?;
 
-        // deposit input token from user to vault
+        // Deposit the input tokens from user to vault
         self.deposit_tokens(is_x, result.deposit)?;
 
-        // withdraw the output token from vault to user
+        // Withdraw the output tokens from vault to user
         self.withdraw_tokens(!is_x, result.withdraw)
-}
+    }
 
-    pub fn deposit_tokens(&mut self, is_x: bool, amount: u64) -> Result<()> {
-        let (from, to) = match is_x{
-            true => (self.user_x.to_account_info(), self.vault_x.to_account_info()),
-            false => (self.user_y.to_account_info(), self.vault_y.to_account_info()),
+    pub fn deposit_tokens(&self, is_x: bool, amount: u64) -> Result<()> {
+        let (from, to) = match is_x {
+            true => (
+                self.user_x.to_account_info(),
+                self.vault_x.to_account_info(),
+            ),
+            false => (
+                self.user_y.to_account_info(),
+                self.vault_y.to_account_info(),
+            ),
         };
 
         let cpi_program = self.token_program.to_account_info();
 
         let cpi_accounts = Transfer {
-            from, to, authority: self.user.to_account_info(),
+            from,
+            to,
+            authority: self.user.to_account_info(),
         };
 
         let ctx = CpiContext::new(cpi_program, cpi_accounts);
 
         transfer(ctx, amount)
+    }
 
-}
-
-    pub fn withdraw_tokens(&mut self, is_x: bool, amount: u64) -> Result<()> {
+    pub fn withdraw_tokens(&self, is_x: bool, amount: u64) -> Result<()> {
         let (from, to) = match is_x {
-            true => (self.vault_x.to_account_info(), self.user_x.to_account_info()),
-            false => (self.vault_y.to_account_info(), self.user_y.to_account_info()),
+            true => (
+                self.vault_x.to_account_info(),
+                self.user_x.to_account_info(),
+            ),
+            false => (
+                self.vault_y.to_account_info(),
+                self.user_y.to_account_info(),
+            ),
         };
 
         let cpi_program = self.token_program.to_account_info();
 
         let cpi_accounts = Transfer {
-            from, to, authority: self.config.to_account_info(),
+            from,
+            to,
+            authority: self.config.to_account_info(),
         };
 
-        // pda signing (vault owned by config pda)
-        let signer_seeds: &[&[&[u8]]] = &[&[b"config", &self.config.seed.to_le_bytes(), &[self.config.config_bump],]];
+        // PDA signing - vault is owned by config PDA
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"config",
+            &self.config.seed.to_le_bytes(),
+            &[self.config.config_bump],
+        ]];
 
-        let ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts,signer_seeds);
+        let ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
 
         transfer(ctx, amount)
     }
-
 }

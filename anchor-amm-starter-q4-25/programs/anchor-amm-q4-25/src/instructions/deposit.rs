@@ -68,9 +68,14 @@ impl<'info> Deposit<'info> {
         amount: u64, // Amount of LP tokens that the user wants to "claim"
         max_x: u64,  // Maximum amount of token X that the user is willing to deposit
         max_y: u64,  // Maximum amount of token Y that the user is willing to deposit
+        expiration: i64,
     ) -> Result<()> {
         require!(self.config.locked == false, AmmError::PoolLocked);
         require!(amount != 0, AmmError::InvalidAmount);
+        require!(
+            Clock::get()?.unix_timestamp < expiration,
+            AmmError::OfferExpired
+        );
 
         let (x, y) = match self.mint_lp.supply == 0
             && self.vault_x.amount == 0
@@ -85,12 +90,16 @@ impl<'info> Deposit<'info> {
                     amount,
                     6,
                 )
-                .unwrap();
+                .map_err(|_| AmmError::CurveError)?;
                 (amounts.x, amounts.y)
             }
         };
 
         require!(x <= max_x && y <= max_y, AmmError::SlippageExceeded);
+        require!(
+            x != 0 && y != 0,
+            AmmError::LiquidityLessThanMinimum
+        );
 
         // deposit token x
         self.deposit_tokens(true, x)?;
